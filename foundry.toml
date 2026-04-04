@@ -1,0 +1,15 @@
+[profile.default]
+src     = "src"      # where forge looks for contracts to compile
+out     = "out"      # compiled artifacts go here (add to .gitignore)
+libs    = ["lib"]   # dependency path
+test    = "test"     # forge looks for *.t.sol files here
+solc    = "0.8.20"  # compiler version
+ 
+[profile.default.fuzz]
+runs    = 1000       # fuzz iterations per test (increase for CI)
+ 
+[fmt]
+line_length = 100
+
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
