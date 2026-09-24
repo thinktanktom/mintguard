@@ -96,7 +96,7 @@ contract MyStablecoin is MintGuard {
     // 4. Guard every redemption with onlyMinter
     function redeem(uint256 amount) external onlyMinter {
         uint256 interestDue = _recordRedemption(msg.sender, amount);
-        // pay interestDue (1e12 USD units) as reward tokens
+        // pay interestDue (1e18 USD units) as reward tokens
         stablecoin.burn(msg.sender, amount);
         collateral.transfer(msg.sender, amount);
     }
@@ -157,7 +157,7 @@ forge test --match-test testFuzz --fuzz-runs 10000
 | `amount` | tokens, 1e18 | `1e18` = 1 token | Standard ERC-20 |
 | `pegPrice` | USD, 1e6 | `980_000` = $0.98 | From your oracle |
 | `rate` | annual %, 1e6 | `52_800` = 5.28% | From your PID controller |
-| `accumInterest` | USD, 1e12 | `1e12` = $1.00 | Output of interest formula |
+| `accumInterest` | USD, 1e18 | `1e18` = $1.00 | Output of interest formula |
 
 **Interest formula** (mirrors `CollateralPoolLibrary.calcMintInterest` exactly):
 

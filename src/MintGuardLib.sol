@@ -1,4 +1,4 @@
-//The 1e12 precision on accumInterest falls out naturally from the interest formula: amount[1e18] * pegPrice[1e6] * rate[1e6] * days / (365 * 1e12)
+//The 1e18 precision on accumInterest falls out naturally from the interest formula: amount[1e18] * pegPrice[1e6] * rate[1e6] * days / (365 * 1e12)
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -7,7 +7,7 @@ library MintGuardLib {
     struct MintRecord {
         uint256 amount;          // principal minted, 1e18
         uint256 weightedRate;    // running WAIR, 1e6
-        uint256 accumInterest;   // accrued interest, 1e12 USD
+        uint256 accumInterest;   // accrued interest, 1e18 USD
         uint256 lastTouch;       // block.timestamp of last mint or redeem
     }
     function applyMint(
@@ -31,17 +31,22 @@ library MintGuardLib {
             updated.lastTouch    = block.timestamp;
         } else {
             // Subsequent mint: accrue first, then blend rate, then add principal
+            uint256 daysElapsed = _daysElapsed(record.lastTouch);
             updated.accumInterest = _accrueInterest(
             record.accumInterest, record.amount,
             record.weightedRate, pegPrice,
-            _daysElapsed(record.lastTouch)
+            daysElapsed
         );
         updated.weightedRate = _blendRate(
             record.amount, record.weightedRate,
             mintAmount, currentRate
         );
         updated.amount    = record.amount + mintAmount;
-        updated.lastTouch = block.timestamp;
+        // Advance by whole days actually accrued, not to block.timestamp:
+        // otherwise a sub-day remainder is discarded on every touch, and an
+        // address that mints/redeems more than once per day never accrues
+        // interest at all.
+        updated.lastTouch = record.lastTouch + daysElapsed * 86400;
     }
 }
 
@@ -57,21 +62,25 @@ function applyRedemption(
     require(pegPrice > 0,                  "MintGuardLib: zero peg price");
  
     updated = record;
- 
+
     // 1. Accrue to now
+    uint256 daysElapsed = _daysElapsed(record.lastTouch);
     updated.accumInterest = _accrueInterest(
         record.accumInterest, record.amount,
         record.weightedRate, pegPrice,
-        _daysElapsed(record.lastTouch)
+        daysElapsed
     );
- 
+
     // 2. Pro-rata slice
     interestDue = (redeemAmount * updated.accumInterest) / record.amount;
- 
+
     // 3. Deduct and reduce principal
     updated.accumInterest = updated.accumInterest - interestDue;
     updated.amount        = record.amount - redeemAmount;
-    updated.lastTouch     = block.timestamp;
+    // See applyMint: advance by whole days actually accrued, not to
+    // block.timestamp, so a sub-day remainder carries into the next accrual
+    // instead of being discarded.
+    updated.lastTouch     = record.lastTouch + daysElapsed * 86400;
 }
 
 // Mirrors: accum + (amount * pegPrice * rate * days) / (365 * 1e12)

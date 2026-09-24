@@ -232,6 +232,38 @@ contract MintGuardTest is Test {
         );
     }
 
+    // Regression: touching a position (mint or redeem) more often than once
+    // every 86400s must NOT reset the accrual clock. Before the fix,
+    // lastTouch was unconditionally stamped to block.timestamp on every
+    // touch, discarding any sub-day remainder and permanently freezing
+    // accumInterest at 0 for anyone who touched daily.
+    function test_SubDailyTouches_DoNotResetAccrualClock() public {
+        uint256 amount = 1_000_000 * ONE_TOKEN;
+        protocol.mint(alice, amount);
+
+        // Touch every 23h for a full year via dust mints.
+        uint256 touchInterval = 23 * 60 * 60;
+        uint256 touchCount = 365;
+        for (uint256 i = 0; i < touchCount; i++) {
+            skip(touchInterval);
+            protocol.mint(alice, 1);
+        }
+
+        // 365 touches 23h apart span ~349.8 real days, not 365 — the
+        // formula must be judged against actual elapsed time, floored to
+        // whole days like the rest of the library.
+        uint256 daysElapsed = (touchInterval * touchCount) / ONE_DAY;
+        uint256 expected = (amount * PEG_PRICE * RATE_MIN * daysElapsed) / (365 * 1e12);
+
+        assertGt(protocol.liveAccruedInterest(alice), 0, "interest must not be frozen at zero");
+        assertApproxEqRel(
+            protocol.liveAccruedInterest(alice),
+            expected,
+            0.01e18, // 1% tolerance for sub-day remainder still pending at the last touch
+            "sub-daily touches must not evade interest accrual"
+        );
+    }
+
 
     // =========================================================================
     // Section 4: Redemption correctness
